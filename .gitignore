@@ -1,0 +1,146 @@
+# ============================================
+# .gitignore para proyecto .NET 10 WPF + NAudio
+# ============================================
+
+## Archivos de compilación
+[Bb]in/
+[Oo]bj/
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.exp
+*.log
+*.tmp
+*.cache
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.pidb
+*.publishsettings
+*.vspscc
+*.vssscc
+*.apk
+*.ipa
+*.appx
+*.msi
+*.nupkg
+*.metaproj
+*.metaproj.tmp
+*.dbmdl
+*.jfm
+*.pfx
+*.publishsettings
+!*.targets
+!*.props
+!*.Designer.cs
+!*.xaml.cs
+
+## Directorios de Visual Studio
+.vs/
+*.ncrunchsolution
+*.ncrunchproject
+_ReSharper.*
+*.resharper
+*.resharper.user
+[Tt]est[Rr]esult*
+*.sln.ide
+*.DotSettings
+*.DotSettings.user
+
+## Archivos de usuario de Visual Studio Code (si usas VS Code)
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+## Paquetes NuGet
+**/packages/*
+!**/packages/repositories.config
+nuget.exe
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.assets.json
+*.nuget.g.props
+*.nuget.g.targets
+
+## Archivos temporales y de sistema operativo
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+*.swo
+*~
+~*
+*.orig
+*.bak
+*.patch
+*.diff
+*.log
+*.trace
+*.etl
+*.iobj
+*.ipdb
+*.dmp
+*.cachefile
+*.vsdoc
+
+## Archivos de configuración de aplicación sensibles
+appsettings.*.json
+!appsettings.json
+*.Private.config
+*.secret.*
+*.key.*
+*.crt
+*.pem
+*.cer
+*.pfx
+*.snk
+
+## Configuración de depuración de Visual Studio
+*.vsmdi
+*.testsettings
+*.testrunconfig
+*.coverage
+*.coveragexml
+*.testresult
+*.trx
+*.diagsession
+*.etl
+*.dgml
+*.sln.ide
+*.DotSettings
+
+## Archivos de profiling
+*.psess
+*.vsp
+*.vspx
+
+## Otros
+*.svclog
+*.tracelog
+*.mdf
+*.ldf
+*.sdf
+*.LocalDB
+*.db
+*.sqlite
+*.sqlite3
+*.accdb
+*.mdb
+
+## Exclusiones específicas del proyecto AudioTwin
+# Si guardas configuraciones de dispositivos u otras preferencias locales
+/app.config.local
+/deviceSettings.json
+/logs/
+*.audio.log
+
+# Archivos generados por NAudio (si los hubiera)
+*.wav
+*.mp3
+*.raw
+*.pcm
