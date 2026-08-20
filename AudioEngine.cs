@@ -1,7 +1,19 @@
-﻿using NAudio.Wave;
-using NAudio.CoreAudioApi;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using NAudio.CoreAudioApi;
+using NAudio.Wave;
+
+public class OutputTarget
+{
+    public MMDevice Device { get; set; }
+    public int DelayMs { get; set; }
+
+    public OutputTarget(MMDevice device, int delayMs = 0)
+    {
+        Device = device;
+        DelayMs = delayMs;
+    }
+}
 
 public class AudioEngine
 {
@@ -9,13 +21,14 @@ public class AudioEngine
     private List<WasapiOut> _outs = new();
     private List<BufferedWaveProvider> _bufs = new();
     private Action<string> _logger;
+    private bool _dataReceivedOnce = false;
 
     public AudioEngine(Action<string> logger)
     {
         _logger = logger ?? (_ => { });
     }
 
-    public void Start(MMDevice source, List<MMDevice> targets)
+    public void Start(MMDevice source, List<OutputTarget> targets)
     {
         try
         {
@@ -30,22 +43,36 @@ public class AudioEngine
             {
                 var b = new BufferedWaveProvider(captureFormat)
                 {
+                    BufferDuration = TimeSpan.FromSeconds(5),
                     DiscardOnBufferOverflow = true
                 };
 
-                var o = new WasapiOut(t, AudioClientShareMode.Shared, true, 100);
+                // Retardo: Se inyecta silencio inicial en el buffer según los ms solicitados
+                if (t.DelayMs > 0)
+                {
+                    int bytesToDelay = (int)((long)captureFormat.AverageBytesPerSecond * t.DelayMs / 1000);
+                    int blockAlign = captureFormat.BlockAlign;
+                    bytesToDelay = (bytesToDelay / blockAlign) * blockAlign; // Alineamiento de canal
+
+                    if (bytesToDelay > 0)
+                    {
+                        byte[] silence = new byte[bytesToDelay];
+                        b.AddSamples(silence, 0, silence.Length);
+                    }
+                }
+
+                var o = new WasapiOut(t.Device, AudioClientShareMode.Shared, true, 100);
                 o.Init(b);
                 o.Play();
 
                 _bufs.Add(b);
                 _outs.Add(o);
 
-                _logger($"  Salida [{++count}]: {t.FriendlyName}");
+                _logger($"  Salida [{++count}]: {t.Device.FriendlyName} | Retardo: {t.DelayMs} ms");
             }
 
             _cap.DataAvailable += (s, e) =>
             {
-                // Solo registramos la primera vez que llegan datos para confirmar flujo
                 if (!_dataReceivedOnce)
                 {
                     _logger("✔ Datos de audio recibidos (flujo activo).");
@@ -53,7 +80,9 @@ public class AudioEngine
                 }
 
                 foreach (var b in _bufs)
+                {
                     b.AddSamples(e.Buffer, 0, e.BytesRecorded);
+                }
             };
 
             _cap.RecordingStopped += (s, e) =>
@@ -72,16 +101,18 @@ public class AudioEngine
         }
     }
 
-    private bool _dataReceivedOnce = false;
-
     public void Stop()
     {
         _logger("Deteniendo motor...");
         _cap?.StopRecording();
         foreach (var o in _outs)
         {
-            o.Stop();
-            o.Dispose();
+            try
+            {
+                o.Stop();
+                o.Dispose();
+            }
+            catch { }
         }
         _outs.Clear();
         _bufs.Clear();
