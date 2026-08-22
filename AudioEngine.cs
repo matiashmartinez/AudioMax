@@ -7,8 +7,9 @@ public class OutputTarget
 {
     public MMDevice Device { get; set; }
     public int DelayMs { get; set; }
-    public float Volume { get; set; } = 100f; // 0 a 100
+    public float Volume { get; set; } = 100f;
 
+    // CONSTRUCTOR DE 3 ARGUMENTOS (Requerido por MainWindow.xaml.cs v1.2.0)
     public OutputTarget(MMDevice device, int delayMs = 0, float volume = 100f)
     {
         Device = device;
@@ -30,7 +31,7 @@ public class AudioEngine
     private bool _inStandby = false;
     private DateTime _lastSoundTime = DateTime.Now;
 
-    public bool EnableAutoSync { get; set; } = true; // Controlado por el Switch UI
+    public bool EnableAutoSync { get; set; } = true;
 
     private const float SILENCE_THRESHOLD = 0.0001f;
     private static readonly TimeSpan StandbyTimeout = TimeSpan.FromSeconds(3);
@@ -139,12 +140,10 @@ public class AudioEngine
 
     private void InyectarMuestrasConVolumen(byte[] buffer, int bytesRecorded)
     {
-        // Procesamos el volumen directamente multiplicando las muestras float de 32-bit
         for (int i = 0; i < _targets.Count; i++)
         {
             float volFactor = _targets[i].Volume / 100f;
             
-            // Si el volumen es 100%, pasamos el buffer original directo (sin overhead)
             if (Math.Abs(volFactor - 1.0f) < 0.001f)
             {
                 try { _bufs[i].AddSamples(buffer, 0, bytesRecorded); } catch { }
