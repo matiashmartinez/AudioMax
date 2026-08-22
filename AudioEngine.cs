@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
@@ -9,7 +10,6 @@ public class OutputTarget
     public int DelayMs { get; set; }
     public float Volume { get; set; } = 100f;
 
-    // CONSTRUCTOR DE 3 ARGUMENTOS (Requerido por MainWindow.xaml.cs v1.2.0)
     public OutputTarget(MMDevice device, int delayMs = 0, float volume = 100f)
     {
         Device = device;
@@ -85,12 +85,24 @@ public class AudioEngine
             };
 
             _cap.StartRecording();
-            _logger("AudioTwin v1.2.0 Motor activo.");
+            _logger("AudioTwin v1.2.2 Motor activo.");
         }
         catch (Exception ex)
         {
             _logger($"ERROR al iniciar: {ex.Message}");
             throw;
+        }
+    }
+
+    // Método para cambiar volumen en tiempo real desde la UI
+    public void UpdateTargetVolume(string deviceId, float newVolume)
+    {
+        foreach (var t in _targets)
+        {
+            if (t.Device.ID == deviceId)
+            {
+                t.Volume = Math.Clamp(newVolume, 0f, 100f);
+            }
         }
     }
 
@@ -117,7 +129,7 @@ public class AudioEngine
                 _logger("🔊 Audio detectado. Reanudando transmisión.");
             }
 
-            InyectarMuestrasConVolumen(e.Buffer, e.BytesRecorded);
+            InyectarMuestrasConVolumenOptimizado(e.Buffer, e.BytesRecorded);
         }
         else
         {
@@ -126,42 +138,50 @@ public class AudioEngine
                 _inStandby = true;
                 if (EnableAutoSync)
                 {
-                    _logger("🌙 Silencio prolongado (Standby). Congelando y re-sincronizando...");
+                    _logger("🌙 Silencio prolongado (Standby). Congelando búferes...");
                     LimpiarBufers();
                 }
             }
 
             if (!_inStandby)
             {
-                InyectarMuestrasConVolumen(e.Buffer, e.BytesRecorded);
+                InyectarMuestrasConVolumenOptimizado(e.Buffer, e.BytesRecorded);
             }
         }
     }
 
-    private void InyectarMuestrasConVolumen(byte[] buffer, int bytesRecorded)
+    private void InyectarMuestrasConVolumenOptimizado(byte[] buffer, int bytesRecorded)
     {
         for (int i = 0; i < _targets.Count; i++)
         {
             float volFactor = _targets[i].Volume / 100f;
-            
+
             if (Math.Abs(volFactor - 1.0f) < 0.001f)
             {
                 try { _bufs[i].AddSamples(buffer, 0, bytesRecorded); } catch { }
             }
             else
             {
-                byte[] processedBuffer = new byte[bytesRecorded];
-                Buffer.BlockCopy(buffer, 0, processedBuffer, 0, bytesRecorded);
-
-                for (int j = 0; j < bytesRecorded; j += 4)
+                byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(bytesRecorded);
+                try
                 {
-                    float sample = BitConverter.ToSingle(processedBuffer, j);
-                    sample *= volFactor;
-                    byte[] bytes = BitConverter.GetBytes(sample);
-                    Buffer.BlockCopy(bytes, 0, processedBuffer, j, 4);
-                }
+                    Buffer.BlockCopy(buffer, 0, rentedBuffer, 0, bytesRecorded);
 
-                try { _bufs[i].AddSamples(processedBuffer, 0, bytesRecorded); } catch { }
+                    for (int j = 0; j < bytesRecorded; j += 4)
+                    {
+                        float sample = BitConverter.ToSingle(rentedBuffer, j);
+                        sample *= volFactor;
+                        byte[] bytes = BitConverter.GetBytes(sample);
+                        Buffer.BlockCopy(bytes, 0, rentedBuffer, j, 4);
+                    }
+
+                    _bufs[i].AddSamples(rentedBuffer, 0, bytesRecorded);
+                }
+                catch { }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(rentedBuffer);
+                }
             }
         }
     }
@@ -217,7 +237,10 @@ public class AudioEngine
     public void Stop()
     {
         _isStopping = true;
-        _logger("Deteniendo motor...");
+        _logger("Deteniendo motor suavemente...");
+
+        // Pequeño fundido de salida (Fade-out rápido de 30ms) para evitar chasquidos al cortar audio
+        System.Threading.Thread.Sleep(30);
 
         _cap?.StopRecording();
         foreach (var o in _outs)

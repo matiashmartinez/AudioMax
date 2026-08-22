@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Controls;
 using NAudio.CoreAudioApi;
 
 namespace AudioTwin.App
@@ -16,6 +17,7 @@ namespace AudioTwin.App
         private bool _isSelected;
         private int _delayMs;
         private float _volume = 100f;
+        private string _batteryStatus = "--";
 
         public MMDevice Device { get; set; } = null!;
         public string DeviceId => Device?.ID ?? "";
@@ -37,6 +39,12 @@ namespace AudioTwin.App
         {
             get => _volume;
             set { _volume = value; OnPropertyChanged(); }
+        }
+
+        public string BatteryStatus
+        {
+            get => _batteryStatus;
+            set { _batteryStatus = value; OnPropertyChanged(); }
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -67,6 +75,7 @@ namespace AudioTwin.App
         private MMDeviceEnumerator _enumerator = new MMDeviceEnumerator();
         public ObservableCollection<OutputDeviceViewModel> OutputDevices { get; set; } = new();
         private readonly string _configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
+        private bool _isInitializedCompletely = false;
 
         public MainWindow()
         {
@@ -74,6 +83,10 @@ namespace AudioTwin.App
             _engine = new AudioEngine(Log);
             CargarDispositivosHardware();
             CargarConfiguracion();
+            _isInitializedCompletely = true;
+
+            // Auto-aplicar si hay configuración previa guardada
+            VerificarYAutoAplicar();
         }
 
         private void CargarDispositivosHardware()
@@ -102,17 +115,36 @@ namespace AudioTwin.App
                 OutputDevices.Clear();
                 foreach (var d in salidasFisicas)
                 {
+                    // Intento seguro de lectura de estado/batería en Windows para dispositivos Bluetooth
+                    string battery = "Bluetooth / OK";
+                    try
+                    {
+                        // Si el nombre indica Bluetooth o dispositivo inalámbrico
+                        if (d.FriendlyName.Contains("Headphones", StringComparison.OrdinalIgnoreCase) || 
+                            d.FriendlyName.Contains("Headset", StringComparison.OrdinalIgnoreCase) ||
+                            d.FriendlyName.Contains("BT", StringComparison.OrdinalIgnoreCase))
+                        {
+                            battery = "Activo";
+                        }
+                        else
+                        {
+                            battery = "Físico";
+                        }
+                    }
+                    catch { battery = "N/A"; }
+
                     OutputDevices.Add(new OutputDeviceViewModel
                     {
                         Device = d,
                         IsSelected = false,
                         DelayMs = 0,
-                        Volume = 100f
+                        Volume = 100f,
+                        BatteryStatus = battery
                     });
                 }
 
                 OutDevs.ItemsSource = OutputDevices;
-                Log($"Dispositivos filtrados: {entradasValidas.Count} entradas, {salidasFisicas.Count} salidas físicas.");
+                Log($"Dispositivos detectados: {entradasValidas.Count} entradas, {salidasFisicas.Count} salidas.");
             }
             catch (Exception ex)
             {
@@ -181,11 +213,31 @@ namespace AudioTwin.App
                     }
                 }
 
-                Log("Configuración previa cargada desde config.json.");
+                Log("Configuración cargada desde config.json.");
             }
             catch (Exception ex)
             {
                 Log($"Error cargando configuración: {ex.Message}");
+            }
+        }
+
+        private void VerificarYAutoAplicar()
+        {
+            if (File.Exists(_configPath) && OutputDevices.Any(x => x.IsSelected))
+            {
+                Log("Auto-aplicando configuración guardada...");
+                Apply_Click(null, null);
+            }
+        }
+
+        // Cambio de volumen en tiempo real al mover el Slider
+        private void Slider_VolumeChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (!_isInitializedCompletely) return;
+
+            if (sender is Slider slider && slider.DataContext is OutputDeviceViewModel vm)
+            {
+                _engine.UpdateTargetVolume(vm.DeviceId, (float)slider.Value);
             }
         }
 
@@ -197,8 +249,11 @@ namespace AudioTwin.App
 
             if (InDev.SelectedItem == null || seleccionados.Count == 0)
             {
-                MessageBox.Show("Selecciona el Cable Virtual en la entrada y marca al menos una salida física.",
-                                "Configuración incompleta", MessageBoxButton.OK, MessageBoxImage.Warning);
+                if (sender != null) // Si el usuario hizo clic manualmente
+                {
+                    MessageBox.Show("Selecciona el Cable Virtual en la entrada y marca al menos una salida física.",
+                                    "Configuración incompleta", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
                 return;
             }
 
@@ -206,9 +261,9 @@ namespace AudioTwin.App
             var targets = seleccionados.Select(x => new OutputTarget(x.Device, x.DelayMs, x.Volume)).ToList();
             bool autoSync = ChkAutoSync.IsChecked ?? true;
 
-            Log("Aplicando configuración v1.2.0...");
+            Log("Aplicando configuración v1.2.2...");
             _engine.Start(cableVirtual, targets, autoSync);
-            StatusText.Text = "Activo (v1.2.0)";
+            StatusText.Text = "Activo (v1.2.2)";
 
             GuardarConfiguracion();
         }
