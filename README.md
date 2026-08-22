@@ -1,73 +1,74 @@
-# 🎧 AudioMax Twin Pro
+# 🎧 AudioTwin Pro (AudioMax)
 
-**AudioMax Twin Pro** es una utilidad de ruteo de audio para Windows, desarrollada en .NET. Permite capturar el sonido del sistema a través de un cable virtual y replicarlo **simultáneamente** en múltiples dispositivos físicos (como auriculares, altavoces y monitores) en tiempo real y con calidad de estudio.
-
-Ideal para gamers, analistas y entusiastas del audio que necesitan escuchar el mismo flujo de sonido en distintos periféricos sin lidiar con los molestos retrasos o las limitaciones nativas de Windows.
-
-## ✨ Características Principales
-* **Múltiples Salidas Simultáneas:** Envía el audio a tus auriculares (ej. Redragon) y a tus parlantes (ej. Realtek) al mismo tiempo.
-* **Alta Fidelidad:** Soporte nativo para tasas de muestreo de nivel profesional (ej. 96000Hz, 32-bit IEEE Float).
-* **Consola de Registro Activa:** Monitor de eventos en tiempo real para visualizar estados de conexión y formatos de captura.
-* **Baja Latencia:** Motor impulsado por las APIs nativas de Windows (WASAPI) para garantizar una latencia casi nula.
+> **AudioTwin Pro** es una aplicación de escritorio avanzada desarrollada en **C# (.NET / WPF)** y potenciada por **NAudio**, diseñada para duplicar, filtrar y sincronizar flujos de audio en tiempo real desde un dispositivo virtual de entrada hacia múltiples salidas físicas de hardware (altavoces, auriculares o dispositivos Bluetooth) con precisión milimétrica.
 
 ---
 
-## 🛠️ Requisitos Previos
+## 🚀 Características Principales (v2.1)
 
-1. **Sistema Operativo:** Windows 10 / Windows 11.
-2. **Entorno:** .NET Runtime (correspondiente a la versión de compilación).
-3. **Driver Virtual:** Necesitas instalar **[VB-Audio Virtual Cable](https://vb-audio.com/Cable/)** (o cualquier cable virtual equivalente) para que actúe como puente.
-
----
-
-## ⚙️ Configuración del Sistema (¡Muy Importante!)
-
-Para que la aplicación funcione correctamente y no sufra bloqueos por parte del sistema operativo, debes seguir estos pasos en Windows antes de ejecutar la app:
-
-### 1. Configurar el Cable Virtual como Salida de Windows
-Todo el audio de tu PC debe dirigirse primero al cable virtual.
-* Ve a los ajustes de sonido de Windows.
-* Selecciona **CABLE Input (VB-Audio Virtual Cable)** como tu dispositivo de salida predeterminado.
-
-### 2. Sincronizar Frecuencias (Sample Rates)
-Para evitar el error de "silencio" o chasquidos, todos los dispositivos involucrados deben hablar el mismo idioma.
-* Ve a **Panel de Control > Sonido**.
-* Haz clic derecho y entra a **Propiedades > Opciones Avanzadas** en los siguientes dispositivos:
-  * El Cable Virtual (Reproducción y Grabación).
-  * Tus auriculares físicos.
-  * Tus altavoces/monitores.
-* Asegúrate de que todos estén configurados exactamente en el mismo formato. *(Recomendado: 24 bits o 32 bits, 48000Hz o 96000Hz)*.
-
-### 3. Permisos de Micrófono en Windows (Bloqueo Común)
-Windows trata al Cable Virtual como un dispositivo de grabación (micrófono). Si la app no tiene permisos, capturará silencio.
-* Ve a **Configuración de Windows > Privacidad y seguridad > Micrófono**.
-* Asegúrate de que **"Permitir que las aplicaciones accedan al micrófono"** esté activado.
-* Activa también **"Permitir que las aplicaciones de escritorio accedan al micrófono"**.
+* **🔄 Sincronización Avanzada Anti-Desfase (Bluetooth):** Resuelve el problema crónico de desincronización en auriculares y parlantes Bluetooth tras períodos de silencio o modo reposo (*Standby*), mediante un reinicio limpio y sincronizado de los búferes de hardware.
+* **🎛️ Control de Volumen en Tiempo Real:** Ajusta el volumen independiente de cada canal de salida al instante mediante barras deslizantes (*Sliders*) fluidas y etiquetas dinámicas, sin reiniciar el motor.
+* **🧠 Filtrado Inteligente de Hardware:** Distingue automáticamente entre dispositivos de entrada virtuales (como *VB-Audio Cable* o *VoiceMeeter*) y altavoces físicos de salida.
+* **💾 Persistencia Local Automática (`config.json`):** Guarda tus preferencias de dispositivos seleccionados, retardos en milisegundos y volúmenes, aplicándolos automáticamente al iniciar la aplicación.
+* **⚡ Arquitectura de Audio Profesional v2.1 (Cero Microcortes):**
+  * **Arranque Simultáneo Absoluto:** Inicializa y dispara todas las salidas de audio en bloque cerrado para minimizar el desfase inicial.
+  * **Optimización de Memoria (Zero-Allocation):** Uso de `ArrayPool` para evitar la saturación del Recolector de Basura (*Garbage Collector*).
+  * **Concurrencia Limpia:** Hilo de monitoreo pasivo en segundo plano (*Watchdog*) para asegurar la salud de los búferes sin generar bloqueos ni chasquidos.
+* **🎨 Interfaz Moderna en Modo Oscuro:** Diseñada con una paleta elegante, tipografía legible y estilos optimizados para hover y selección en listas.
+* **🛡️ Protección Anti-Clipping (Soft-Stop):** Aplicación de una detención suave al apagar el motor para evitar ruidos molestos en los parlantes.
 
 ---
 
-## 🚀 Cómo usar AudioMax Twin Pro
+## 📋 Requisitos del Sistema
 
-1. Abre la aplicación.
-2. En el panel **Dispositivo de entrada (Cable Virtual)**, selecciona el dispositivo de captura (generalmente `CABLE Input (VB-Audio Virtual Cable)`).
-3. En la lista de **Altavoces de salida (múltiples)**, haz clic para seleccionar todos los dispositivos físicos por donde quieres que salga el sonido (puedes seleccionar varios manteniendo presionada la tecla `Ctrl`).
-4. Haz clic en el botón **▶ Aplicar**.
-5. Verifica en el **Registro de actividad** inferior que la captura se haya iniciado correctamente y que el formato coincida con el de tu sistema.
-6. ¡Disfruta del audio sincronizado! Para detener el ruteo, simplemente haz clic en **⏹ Detener** o cierra la aplicación.
+1. **Windows 10 / 11** (x64).
+2. Un controlador de audio virtual de entrada instalado (Recomendado: **[VB-CABLE Virtual Audio Device](https://vb-audio.com/Cable/)** o VoiceMeeter).
+3. Dispositivos de salida físicos (auriculares cableados, altavoces, dispositivos Bluetooth, etc.).
 
 ---
 
-## 🐛 Solución de Problemas Frecuentes
+## ⚙️ Guía de Uso Paso a Paso
 
-* **No sale ningún sonido tras darle a Aplicar:** 
-  Verifica que el cable virtual no esté en *Modo Exclusivo* en Windows. Ve a las propiedades del dispositivo > Opciones Avanzadas y desmarca "Permitir que las aplicaciones tomen el control exclusivo de este dispositivo".
-* **Error de Formato o Crash al iniciar:** 
-  Las frecuencias (Hz) entre el dispositivo de entrada y los de salida no coinciden. Revisa el Paso 2 de la configuración.
-* **El log muestra que captura, pero hay silencio:**
-  Verifica que el volumen principal de Windows no esté en 0% o muteado, ya que algunos drivers suspenden el flujo de datos. Asegúrate de haber realizado el Paso 3 (Privacidad del micrófono).
+### 1. Preparación del Sistema (Dispositivo Virtual)
+1. Instala y configura **VB-CABLE** (o tu cable virtual preferido).
+2. En la configuración de sonido de Windows, establece **CABLE Input** como tu **Dispositivo de Reproducción Predeterminado**. (Todo el sonido de tus juegos, navegador o reproductor multimedia pasará por este cable virtual).
+
+### 2. Ejecución y Configuración en AudioTwin Pro
+1. Abre **AudioTwin Pro**.
+2. **Dispositivo de entrada:** En el menú desplegable superior, selecciona el cable virtual (ej. *CABLE Output*). La app lo detectará automáticamente gracias al filtrado inteligente.
+3. **Dispositivos de salida:** En la lista central, marca las casillas (**Usar**) de los altavoces o auriculares físicos por los que quieres que suene el audio simultáneamente.
+4. **Ajuste de Retardo (ms):** Si tus auriculares Bluetooth tienen un retraso natural de fábrica, ingresa los milisegundos necesarios (ej. `150` o `200`) para compensarlo y alinearlos perfectamente con tus parlantes por cable.
+5. **Control de Volumen:** Desliza la barra de volumen de cada salida en tiempo real según lo necesites.
+6. **Auto-Sincronización:** Mantén marcado el interruptor de Auto-Sync para mitigar la deriva de los relojes de hardware (*clock drift*).
+
+### 3. Aplicar y Guardar
+* Haz clic en el botón **▶ Aplicar**. El motor iniciará instantáneamente.
+* La aplicación guardará tus preferencias en un archivo `config.json` local, por lo que la próxima vez que la abras, **se aplicará y reproducirá automáticamente**.
 
 ---
 
-## 👨‍💻 Tecnologías Utilizadas
-* C# / .NET
-* [NAudio](https://github.com/naudio/NAudio) - Librería principal para el manejo de las APIs de audio de Windows.
+## 🛠️ Tecnologías Utilizadas
+
+* **Lenguaje:** C# (.NET)
+* **Interfaz Gráfica:** WPF (Windows Presentation Foundation)
+* **Motor de Audio:** NAudio (CoreAudioApi / WASAPI Loopback)
+* **Concurrencia:** Tasks, ArrayPool y gestión segura de hilos.
+
+---
+
+## 📂 Estructura del Código
+
+* `MainWindow.xaml` / `MainWindow.xaml.cs`: Interfaz de usuario, enlace de datos con ViewModels y lógica de persistencia JSON.
+* `AudioEngine.cs`: Núcleo de procesamiento de audio en tiempo real, control de búferes WASAPI y sincronización multi-canal con arquitectura profesional.
+
+---
+
+## 👨‍💻 Autor
+
+Desarrollado con enfoque de ingeniería profesional por **Matías H. Martínez**.
+
+---
+
+## 📄 Licencia
+
+Este proyecto se distribuye bajo los términos de la licencia MIT. Consulta el archivo `LICENSE` para más detalles.
