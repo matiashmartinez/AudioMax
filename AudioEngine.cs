@@ -85,7 +85,7 @@ public class AudioEngine
             };
 
             _cap.StartRecording();
-            _logger("AudioTwin v1.2.2 Motor activo.");
+            _logger("AudioTwin v1.2.3 Motor activo.");
         }
         catch (Exception ex)
         {
@@ -94,7 +94,6 @@ public class AudioEngine
         }
     }
 
-    // Método para cambiar volumen en tiempo real desde la UI
     public void UpdateTargetVolume(string deviceId, float newVolume)
     {
         foreach (var t in _targets)
@@ -124,9 +123,14 @@ public class AudioEngine
 
             if (_inStandby)
             {
-                if (EnableAutoSync) EjecutarAutoResync();
                 _inStandby = false;
-                _logger("🔊 Audio detectado. Reanudando transmisión.");
+                _logger("🔊 Audio detectado saliendo de Standby.");
+                
+                // Al despertar, re-aplicamos estrictamente las latencias actuales de los targets
+                if (EnableAutoSync && _cap != null)
+                {
+                    EjecutarReinicioLatenciaAlDespertar(_cap.WaveFormat);
+                }
             }
 
             InyectarMuestrasConVolumenOptimizado(e.Buffer, e.BytesRecorded);
@@ -138,7 +142,7 @@ public class AudioEngine
                 _inStandby = true;
                 if (EnableAutoSync)
                 {
-                    _logger("🌙 Silencio prolongado (Standby). Congelando búferes...");
+                    _logger("🌙 Silencio prolongado (Standby). Limpiando búferes...");
                     LimpiarBufers();
                 }
             }
@@ -147,6 +151,22 @@ public class AudioEngine
             {
                 InyectarMuestrasConVolumenOptimizado(e.Buffer, e.BytesRecorded);
             }
+        }
+    }
+
+    private void EjecutarReinicioLatenciaAlDespertar(WaveFormat fmt)
+    {
+        _logger("🔄 Re-sincronizando latencias de dispositivos tras reposo...");
+        for (int i = 0; i < _bufs.Count; i++)
+        {
+            try
+            {
+                _bufs[i].ClearBuffer();
+                // Lee el valor actual de latencia configurado en memoria para este target
+                int delayActual = _targets[i].DelayMs;
+                AplicarDelayInicial(_bufs[i], fmt, delayActual);
+            }
+            catch { }
         }
     }
 
@@ -194,18 +214,6 @@ public class AudioEngine
         }
     }
 
-    private void EjecutarAutoResync()
-    {
-        if (_cap == null) return;
-        WaveFormat fmt = _cap.WaveFormat;
-
-        for (int i = 0; i < _bufs.Count; i++)
-        {
-            _bufs[i].ClearBuffer();
-            AplicarDelayInicial(_bufs[i], fmt, _targets[i].DelayMs);
-        }
-    }
-
     private static void AplicarDelayInicial(BufferedWaveProvider b, WaveFormat format, int delayMs)
     {
         if (delayMs <= 0) return;
@@ -239,7 +247,6 @@ public class AudioEngine
         _isStopping = true;
         _logger("Deteniendo motor suavemente...");
 
-        // Pequeño fundido de salida (Fade-out rápido de 30ms) para evitar chasquidos al cortar audio
         System.Threading.Thread.Sleep(30);
 
         _cap?.StopRecording();
