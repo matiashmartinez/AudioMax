@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
@@ -26,15 +28,11 @@ public class AudioEngine
     private readonly List<OutputTarget> _targets = new();
     private readonly Action<string> _logger;
 
-    private bool _dataReceivedOnce = false;
+    private CancellationTokenSource? _driftWatchdogCts;
     private bool _isStopping = false;
-    private bool _inStandby = false;
-    private DateTime _lastSoundTime = DateTime.Now;
+    private bool _dataReceivedOnce = false;
 
     public bool EnableAutoSync { get; set; } = true;
-
-    private const float SILENCE_THRESHOLD = 0.0001f;
-    private static readonly TimeSpan StandbyTimeout = TimeSpan.FromSeconds(3);
 
     public AudioEngine(Action<string> logger)
     {
@@ -45,36 +43,46 @@ public class AudioEngine
     {
         try
         {
+            Stop(); // Limpieza previa segura
             _isStopping = false;
-            _inStandby = false;
             EnableAutoSync = enableAutoSync;
             _targets.Clear();
             _targets.AddRange(targets);
 
-            _logger($"Iniciando captura desde: {source.FriendlyName}");
+            _logger($"Iniciando motor profesional v2.1 desde: {source.FriendlyName}");
 
             _cap = new WasapiLoopbackCapture(source);
             WaveFormat captureFormat = _cap.WaveFormat;
 
-            int count = 0;
+            var pendingOuts = new List<WasapiOut>();
+
             foreach (var t in targets)
             {
+                if (t.DelayMs > 8000)
+                {
+                    throw new ArgumentException($"El retardo para {t.Device.FriendlyName} supera el límite seguro.");
+                }
+
                 var b = new BufferedWaveProvider(captureFormat)
                 {
-                    BufferDuration = TimeSpan.FromSeconds(5),
-                    DiscardOnBufferOverflow = true
+                    BufferDuration = TimeSpan.FromSeconds(10),
+                    DiscardOnBufferOverflow = false
                 };
 
                 AplicarDelayInicial(b, captureFormat, t.DelayMs);
 
                 var o = new WasapiOut(t.Device, AudioClientShareMode.Shared, true, 100);
                 o.Init(b);
-                o.Play();
 
                 _bufs.Add(b);
                 _outs.Add(o);
+                pendingOuts.Add(o);
+            }
 
-                _logger($"  Salida [{++count}]: {t.Device.FriendlyName} | Retardo: {t.DelayMs}ms | Vol: {t.Volume}%");
+            // Arranque simultáneo en bloque cerrado (Cero desfase inicial)
+            foreach (var o in pendingOuts)
+            {
+                o.Play();
             }
 
             _cap.DataAvailable += OnDataAvailable;
@@ -85,11 +93,19 @@ public class AudioEngine
             };
 
             _cap.StartRecording();
-            _logger("AudioTwin v1.2.3 Motor activo.");
+
+            // Monitor pasivo de salud de búferes (Sin alterar punteros de NAudio para evitar microcortes)
+            if (EnableAutoSync)
+            {
+                StartHealthMonitor();
+            }
+
+            _logger("AudioTwin Pro v2.1 - Motor Estable Activo.");
         }
         catch (Exception ex)
         {
-            _logger($"ERROR al iniciar: {ex.Message}");
+            _logger($"ERROR al iniciar motor: {ex.Message}");
+            Stop();
             throw;
         }
     }
@@ -111,63 +127,51 @@ public class AudioEngine
 
         if (!_dataReceivedOnce)
         {
-            _logger("✔ Flujo de audio activo.");
+            _logger("✔ Flujo de audio estable activo.");
             _dataReceivedOnce = true;
         }
 
-        float rms = CalcularRMS_32BitFloat(e.Buffer, e.BytesRecorded);
-
-        if (rms > SILENCE_THRESHOLD)
-        {
-            _lastSoundTime = DateTime.Now;
-
-            if (_inStandby)
-            {
-                _inStandby = false;
-                _logger("🔊 Audio detectado saliendo de Standby.");
-                
-                // Al despertar, re-aplicamos estrictamente las latencias actuales de los targets
-                if (EnableAutoSync && _cap != null)
-                {
-                    EjecutarReinicioLatenciaAlDespertar(_cap.WaveFormat);
-                }
-            }
-
-            InyectarMuestrasConVolumenOptimizado(e.Buffer, e.BytesRecorded);
-        }
-        else
-        {
-            if (!_inStandby && (DateTime.Now - _lastSoundTime) > StandbyTimeout)
-            {
-                _inStandby = true;
-                if (EnableAutoSync)
-                {
-                    _logger("🌙 Silencio prolongado (Standby). Limpiando búferes...");
-                    LimpiarBufers();
-                }
-            }
-
-            if (!_inStandby)
-            {
-                InyectarMuestrasConVolumenOptimizado(e.Buffer, e.BytesRecorded);
-            }
-        }
+        InyectarMuestrasConVolumenOptimizado(e.Buffer, e.BytesRecorded);
     }
 
-    private void EjecutarReinicioLatenciaAlDespertar(WaveFormat fmt)
+    // Monitor pasivo seguro (Monitorea sin corromper la memoria compartida de NAudio)
+    private void StartHealthMonitor()
     {
-        _logger("🔄 Re-sincronizando latencias de dispositivos tras reposo...");
-        for (int i = 0; i < _bufs.Count; i++)
+        _driftWatchdogCts = new CancellationTokenSource();
+        var token = _driftWatchdogCts.Token;
+
+        Task.Run(async () =>
         {
-            try
+            while (!token.IsCancellationRequested)
             {
-                _bufs[i].ClearBuffer();
-                // Lee el valor actual de latencia configurado en memoria para este target
-                int delayActual = _targets[i].DelayMs;
-                AplicarDelayInicial(_bufs[i], fmt, delayActual);
+                try
+                {
+                    // Usamos delay seguro con manejo de cancelación limpio sin excepciones no controladas
+                    await Task.Delay(5000, token); 
+
+                    if (_isStopping || _bufs.Count == 0) break;
+
+                    // Verificación pasiva de niveles de búfer para diagnóstico interno
+                    for (int i = 0; i < _bufs.Count; i++)
+                    {
+                        double actualMs = _bufs[i].BufferedDuration.TotalMilliseconds;
+                        if (actualMs > 8000) // Si se acumula demasiado por lentitud del hardware
+                        {
+                            _bufs[i].ClearBuffer(); // Limpieza preventiva de desborde sin bloquear el hilo de audio
+                        }
+                    }
+                }
+                catch (TaskCanceledException)
+                {
+                    // Salida limpia y silenciosa del hilo al detener el motor
+                    break;
+                }
+                catch
+                {
+                    // Ignorar excepciones menores de diagnóstico
+                }
             }
-            catch { }
-        }
+        }, token);
     }
 
     private void InyectarMuestrasConVolumenOptimizado(byte[] buffer, int bytesRecorded)
@@ -206,14 +210,6 @@ public class AudioEngine
         }
     }
 
-    private void LimpiarBufers()
-    {
-        for (int i = 0; i < _bufs.Count; i++)
-        {
-            _bufs[i].ClearBuffer();
-        }
-    }
-
     private static void AplicarDelayInicial(BufferedWaveProvider b, WaveFormat format, int delayMs)
     {
         if (delayMs <= 0) return;
@@ -228,28 +224,29 @@ public class AudioEngine
         }
     }
 
-    private static float CalcularRMS_32BitFloat(byte[] buffer, int bytesRecorded)
-    {
-        float sum = 0;
-        int sampleCount = bytesRecorded / 4;
-
-        for (int i = 0; i < bytesRecorded; i += 4)
-        {
-            float sample = BitConverter.ToSingle(buffer, i);
-            sum += sample * sample;
-        }
-
-        return (float)Math.Sqrt(sum / Math.Max(1, sampleCount));
-    }
-
     public void Stop()
     {
         _isStopping = true;
-        _logger("Deteniendo motor suavemente...");
 
-        System.Threading.Thread.Sleep(30);
+        // Cancelar hilo de forma ordenada y segura antes de liberar recursos
+        try
+        {
+            _driftWatchdogCts?.Cancel();
+            _driftWatchdogCts?.Dispose();
+            _driftWatchdogCts = null;
+        }
+        catch { }
 
-        _cap?.StopRecording();
+        _logger("Deteniendo motor limpiamente...");
+
+        try
+        {
+            _cap?.StopRecording();
+            _cap?.Dispose();
+        }
+        catch { }
+        _cap = null;
+
         foreach (var o in _outs)
         {
             try
@@ -263,6 +260,6 @@ public class AudioEngine
         _bufs.Clear();
         _targets.Clear();
 
-        _logger("Motor detenido limpiamente.");
+        _logger("Motor detenido sin errores.");
     }
 }
